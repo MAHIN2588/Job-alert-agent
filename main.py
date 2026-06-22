@@ -54,10 +54,10 @@ def send_telegram(token, chat_id, message):
 
 def main():
     token = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("CHAT_ID")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("CHAT_ID")
 
     if not token or not chat_id:
-        print("❌ Missing TELEGRAM_TOKEN or CHAT_ID")
+        print("❌ Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID/CHAT_ID")
         return
 
     print("🔍 Fetching jobs...")
