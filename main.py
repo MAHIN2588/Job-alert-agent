@@ -1,58 +1,81 @@
 import os
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
-def scrape_bdjobs():
-    url = "https://jobs.bdjobs.com/jobsearch.asp?txtsearch=&fcat=0&fcattype=0&fAreaId=6"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
+load_dotenv()
 
+def get_jobs():
+    """Scrape remote Python jobs from RemoteOK"""
+    headers = {"User-Agent": "Mozilla/5.0"}
+    url = "https://remoteok.com/remote-python-jobs"
     try:
         res = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
+        res.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"❌ Failed to fetch jobs: {exc}")
+        return []
 
-        jobs = []
-        job_items = soup.find_all('div', class_='job-title-box')
+    soup = BeautifulSoup(res.text, "html.parser")
 
-        for item in job_items[:10]:
-            try:
-                title_el = item.find('a')
-                title = title_el.text.strip() if title_el else "N/A"
+    jobs = []
+    for row in soup.find_all("tr", class_="job")[:5]:  # top 5 jobs
+        title_tag = row.find("h2", itemprop="title")
+        company_tag = row.find("h3", itemprop="name")
+        link_tag = row.get("data-url")
 
-                company_el = item.find('span', class_='comp-name-mbl')
-                company = company_el.text.strip() if company_el else "N/A"
+        if title_tag and company_tag:
+            jobs.append({
+                "title": title_tag.text.strip(),
+                "company": company_tag.text.strip(),
+                "link": f"https://remoteok.com{link_tag}" if link_tag else "N/A"
+            })
+    return jobs
 
-                jobs.append(f"📌 {title}\n🏢 {company}")
-            except:
-                continue
-
-        return jobs
-
-    except Exception as e:
-        return [f"Error: {e}"]
-
-
-def send_telegram(message):
-    token = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+def send_telegram(token, chat_id, message):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, json={"chat_id": chat_id, "text": message})
+    try:
+        res = requests.post(url, json={
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "Markdown"
+        }, timeout=15)
+        res.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"❌ Telegram API error: {exc}")
+        return False
 
+    data = res.json()
+    if not data.get("ok"):
+        print(f"❌ Telegram API returned an error: {data}")
+        return False
+
+    return True
 
 def main():
-    print("BDJobs থেকে job খুঁজছি...")
-    jobs = scrape_bdjobs()
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("CHAT_ID")
 
-    if jobs:
-        message = f"🔔 BDJobs — {len(jobs)} টা job:\n\n"
-        message += "\n\n".join(jobs[:5])
-        send_telegram(message)
-        print(f"✅ {len(jobs)} টা job Telegram এ পাঠানো হয়েছে")
+    if not token or not chat_id:
+        print("❌ Missing TELEGRAM_TOKEN or CHAT_ID")
+        return
+
+    print("🔍 Fetching jobs...")
+    jobs = get_jobs()
+
+    if not jobs:
+        if not send_telegram(token, chat_id, "⚠️ No jobs found today."):
+            print("❌ Failed to send Telegram notification.")
+        return
+
+    message = "🚀 *Latest Remote Python Jobs*\n\n"
+    for i, job in enumerate(jobs, 1):
+        message += f"{i}. *{job['title']}* at {job['company']}\n🔗 {job['link']}\n\n"
+
+    if send_telegram(token, chat_id, message):
+        print("✅ Alert sent!")
     else:
-        print("❌ কোনো job পাইনি")
-        send_telegram("⚠️ এবার কোনো job পাইনি")
-
+        print("❌ Failed to send Telegram notification.")
 
 if __name__ == "__main__":
     main()
