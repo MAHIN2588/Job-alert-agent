@@ -37,15 +37,21 @@ def send_telegram(token, chat_id, message):
     try:
         res = requests.post(url, json={
             "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "Markdown"
+            "text": message
         }, timeout=15)
         res.raise_for_status()
     except requests.RequestException as exc:
         print(f"❌ Telegram API error: {exc}")
+        if hasattr(exc, "response") and exc.response is not None:
+            print(f"Telegram response: {exc.response.text}")
         return False
 
-    data = res.json()
+    try:
+        data = res.json()
+    except ValueError:
+        print(f"❌ Telegram response was not valid JSON: {res.text}")
+        return False
+
     if not data.get("ok"):
         print(f"❌ Telegram API returned an error: {data}")
         return False
