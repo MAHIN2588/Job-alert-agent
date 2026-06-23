@@ -19,7 +19,7 @@ def get_jobs():
     soup = BeautifulSoup(res.text, "html.parser")
 
     jobs = []
-    for row in soup.find_all("tr", class_="job")[:5]:  # top 5 jobs
+    for row in soup.find_all("tr", class_="job")[:5]:
         title_tag = row.find("h2", itemprop="title")
         company_tag = row.find("h3", itemprop="name")
         link_tag = row.get("data-url")
@@ -33,11 +33,13 @@ def get_jobs():
     return jobs
 
 def send_telegram(token, chat_id, message):
+    """Send a message via Telegram bot"""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         res = requests.post(url, json={
             "chat_id": chat_id,
-            "text": message
+            "text": message,
+            "parse_mode": "Markdown"
         }, timeout=15)
         res.raise_for_status()
     except requests.RequestException as exc:
@@ -70,13 +72,13 @@ def main():
     jobs = get_jobs()
 
     if not jobs:
-        if not send_telegram(token, chat_id, "⚠️ No jobs found today."):
-            print("❌ Failed to send Telegram notification.")
+        send_telegram(token, chat_id, "⚠️ No jobs found today.")
+        print("⚠️ No jobs found.")
         return
 
     message = "🚀 *Latest Remote Python Jobs*\n\n"
     for i, job in enumerate(jobs, 1):
-        message += f"{i}. *{job['title']}* at {job['company']}\n🔗 {job['link']}\n\n"
+        message += f"{i}\\. *{job['title']}* at {job['company']}\n🔗 {job['link']}\n\n"
 
     if send_telegram(token, chat_id, message):
         print("✅ Alert sent!")
